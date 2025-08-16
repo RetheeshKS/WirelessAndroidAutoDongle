@@ -39,6 +39,9 @@ int main(void) {
         if (connectionStrategy != ConnectionStrategy::DONGLE_MODE) {
             BluetoothHandler::instance().powerOn();
         }
+        BluetoothHandler::instance().exportWirelessProfile();
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        BluetoothHandler::instance().exportHSPProfile();
 
         std::optional<std::thread> btConnectionThread = BluetoothHandler::instance().connectWithRetry();
 

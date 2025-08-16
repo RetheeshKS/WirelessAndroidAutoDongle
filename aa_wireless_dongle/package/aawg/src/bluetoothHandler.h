@@ -20,6 +20,8 @@ public:
 
     std::optional<std::thread> connectWithRetry();
     void stopConnectWithRetry();
+    void exportWirelessProfile();
+    void exportHSPProfile();
 
 private:
     BluetoothHandler() {};

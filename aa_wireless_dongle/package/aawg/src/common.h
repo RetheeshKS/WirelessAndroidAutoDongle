@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <optional>
 
+#define ENABLE_LOGS 1
+
 enum SecurityMode: int;
 enum AccessPointType: int;
 

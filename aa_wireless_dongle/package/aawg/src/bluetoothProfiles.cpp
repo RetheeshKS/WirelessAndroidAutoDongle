@@ -17,6 +17,7 @@ static constexpr const char* INTERFACE_BLUEZ_PROFILE = "org.bluez.Profile1";
 
 #pragma region BluezProfile
 BluezProfile::BluezProfile(DBus::Path path): DBus::Object(path) {
+    Logger::instance()->info("%s: Registering callbacks NewConnection, Release, RequestDisconnection(path:%s)\n", __FUNCTION__, path.c_str());
     this->create_method<void(void)>(INTERFACE_BLUEZ_PROFILE, "Release", sigc::mem_fun(*this, &BluezProfile::Release));
     this->create_method<void(DBus::Path, std::shared_ptr<DBus::FileDescriptor>, DBus::Properties)>(INTERFACE_BLUEZ_PROFILE ,"NewConnection", sigc::mem_fun(*this, &BluezProfile::NewConnection));
     this->create_method<void(DBus::Path)>(INTERFACE_BLUEZ_PROFILE, "RequestDisconnection", sigc::mem_fun(*this, &BluezProfile::RequestDisconnection));
@@ -50,7 +51,7 @@ public:
             return;
         }
 
-        Logger::instance()->info("Sending WifiInfoResponse (ssid: %s, bssid: %s)\n", wifiInfo.ssid.c_str(), wifiInfo.bssid.c_str());
+        Logger::instance()->info("Sending WifiInfoResponse (ssid: %s, key:%s, bssid: %s)\n", wifiInfo.ssid.c_str(), wifiInfo.key.c_str(), wifiInfo.bssid.c_str());
         WifiInfoResponse wifiInfoResponse;
         wifiInfoResponse.set_ssid(wifiInfo.ssid);
         wifiInfoResponse.set_key(wifiInfo.key);
@@ -59,9 +60,11 @@ public:
         wifiInfoResponse.set_access_point_type(wifiInfo.accessPointType);
 
         SendMessage(MessageId::WifiInfoResponse, &wifiInfoResponse);
-
+        Logger::instance()->info("%s: Sent WifiInfoResponse\n", __FUNCTION__);
         ReadMessage();
+        Logger::instance()->info("%s: Got the first Reply\n", __FUNCTION__);
         ReadMessage();
+        Logger::instance()->info("%s: Got the Second Reply\n", __FUNCTION__);
     }
 
 private:

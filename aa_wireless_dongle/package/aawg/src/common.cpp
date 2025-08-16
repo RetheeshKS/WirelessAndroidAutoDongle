@@ -105,9 +105,11 @@ Logger::~Logger() {
 }
 
 void Logger::info(const char *format, ...) {
+    #if ENABLE_LOGS
     va_list args;
     va_start(args, format);
     vsyslog(LOG_INFO, format, args);
     va_end(args);
+    #endif
 }
 #pragma endregion Logger

@@ -5,7 +5,7 @@
 #include "bluetoothProfiles.h"
 #include "bluetoothAdvertisement.h"
 
-static constexpr const char* ADAPTER_ALIAS_PREFIX = "WirelessAADongle-";
+static constexpr const char* ADAPTER_ALIAS_PREFIX = "Tucson-AndroidAuto-";
 static constexpr const char* ADAPTER_ALIAS_DONGLE_PREFIX = "AndroidAuto-Dongle-";
 
 static constexpr const char* BLUEZ_BUS_NAME = "org.bluez";
@@ -88,6 +88,7 @@ void BluetoothHandler::initAdapter() {
         Logger::instance()->info("Did not find any bluetooth adapters\n");
     }
     else {
+        Logger::instance()->info("%s: calling BluezAdapterProxy::create\n", __FUNCTION__);
         m_adapter = BluezAdapterProxy::create(m_connection, adapter_path);
         m_adapter->alias->set_value(m_adapterAlias);
         Logger::instance()->info("Bluetooth adapter alias: %s\n", m_adapterAlias.c_str());
@@ -114,6 +115,7 @@ void BluetoothHandler::setPairable(bool pairable) {
 }
 
 void BluetoothHandler::exportProfiles() {
+    Logger::instance()->info("%s:calling AAWirelessProfile::create() and exporting profiles\n", __FUNCTION__);
     std::shared_ptr<DBus::ObjectProxy> bluezObject = m_connection->create_object_proxy(BLUEZ_BUS_NAME, BLUEZ_OBJECT_PATH);
     DBus::MethodProxy registerProfile = *(bluezObject->create_method<void(DBus::Path, std::string, DBus::Properties)>(INTERFACE_BLUEZ_PROFILE_MANAGER, "RegisterProfile"));
 
@@ -142,6 +144,46 @@ void BluetoothHandler::exportProfiles() {
         Logger::instance()->info("HSP Handset profile active\n");
     }
 }
+
+
+//////////////////////////////////////
+void BluetoothHandler::exportWirelessProfile() {
+    Logger::instance()->info("%s:calling AAWirelessProfile::create() and exporting profiles\n", __FUNCTION__);
+    std::shared_ptr<DBus::ObjectProxy> bluezObject = m_connection->create_object_proxy(BLUEZ_BUS_NAME, BLUEZ_OBJECT_PATH);
+    DBus::MethodProxy registerProfile = *(bluezObject->create_method<void(DBus::Path, std::string, DBus::Properties)>(INTERFACE_BLUEZ_PROFILE_MANAGER, "RegisterProfile"));
+
+    // Register AA Wireless Profile
+    m_aawProfile = AAWirelessProfile::create(AAWG_PROFILE_OBJECT_PATH);
+    if (m_connection->register_object(m_aawProfile, DBus::ThreadForCalling::DispatcherThread) != DBus::RegistrationStatus::Success) {
+        Logger::instance()->info("Failed to register AA Wireless profile\n");
+    }
+
+    registerProfile(AAWG_PROFILE_OBJECT_PATH, AAWG_PROFILE_UUID, {
+        {"Name", DBus::Variant("AA Wireless")},
+        {"Role", DBus::Variant("server")},
+        {"Channel", DBus::Variant(uint16_t(8))},
+    });
+    Logger::instance()->info("Bluetooth AA Wireless profile active\n");
+}
+
+void BluetoothHandler::exportHSPProfile() {
+    Logger::instance()->info("%s:calling AAWirelessProfile::create() and exporting profiles\n", __FUNCTION__);
+    std::shared_ptr<DBus::ObjectProxy> bluezObject = m_connection->create_object_proxy(BLUEZ_BUS_NAME, BLUEZ_OBJECT_PATH);
+    DBus::MethodProxy registerProfile = *(bluezObject->create_method<void(DBus::Path, std::string, DBus::Properties)>(INTERFACE_BLUEZ_PROFILE_MANAGER, "RegisterProfile"));
+    if (Config::instance()->getConnectionStrategy() != ConnectionStrategy::DONGLE_MODE) {
+        // Register HSP Handset profile
+        m_hspProfile = HSPHSProfile::create(HSP_HS_PROFILE_OBJECT_PATH);
+        if (m_connection->register_object(m_hspProfile, DBus::ThreadForCalling::DispatcherThread) != DBus::RegistrationStatus::Success) {
+            Logger::instance()->info("Failed to register HSP Handset profile\n");
+        }
+        registerProfile(HSP_HS_PROFILE_OBJECT_PATH, HSP_HS_UUID, {
+            {"Name", DBus::Variant("HSP HS")},
+        });
+        Logger::instance()->info("HSP Handset profile active\n");
+    }
+}
+
+//////////////////////////////////////
 
 void BluetoothHandler::startAdvertising() {
     if (!m_adapter) {
@@ -191,7 +233,7 @@ void BluetoothHandler::connectDevice() {
 
     const bool isDongleMode = (Config::instance()->getConnectionStrategy() == ConnectionStrategy::DONGLE_MODE);
 
-    Logger::instance()->info("Found %d bluetooth devices\n", device_paths.size());
+    Logger::instance()->info("%s: Found %d bluetooth devices\n", __FUNCTION__, device_paths.size());
 
     for (const std::string &device_path: device_paths) {
         Logger::instance()->info("Trying to connect bluetooth device at path: %s\n", device_path.c_str());
@@ -227,7 +269,7 @@ void BluetoothHandler::connectDevice() {
 void BluetoothHandler::retryConnectLoop() {
     bool should_exit = false;
     std::future<void> connectWithRetryFuture = connectWithRetryPromise->get_future();
-
+    Logger::instance()->info("%s:Calling connectDevice in the loop\n", __FUNCTION__);
     while (!should_exit) {
         connectDevice();
 
@@ -242,9 +284,18 @@ void BluetoothHandler::retryConnectLoop() {
     }
 }
 
+void dbus_log_function(const char *logger_name, const struct SL_LogLocation *location, const enum SL_LogLevel level, const char *log_string) {
+    FILE *fp = fopen("/var/log/dbus_log.txt", "a");
+    if (fp) {
+        fprintf(fp, "%s: %s\n",  logger_name, log_string);
+        fclose(fp);
+    } else {
+        fprintf(stderr, "Failed to open log file: %s\n", log_string);
+    }
+}
 void BluetoothHandler::init() {
-    // DBus::set_logging_function( DBus::log_std_err );
-    // DBus::set_log_level( SL_TRACE );
+     DBus::set_logging_function( dbus_log_function );
+     DBus::set_log_level( SL_TRACE );
 
     m_dispatcher = DBus::StandaloneDispatcher::create();
     m_connection = m_dispatcher->create_connection( DBus::BusType::SYSTEM );
@@ -252,20 +303,21 @@ void BluetoothHandler::init() {
     std::string adapterAliasPrefix = (Config::instance()->getConnectionStrategy() == ConnectionStrategy::DONGLE_MODE) ? ADAPTER_ALIAS_DONGLE_PREFIX : ADAPTER_ALIAS_PREFIX;
 
     m_adapterAlias = adapterAliasPrefix + Config::instance()->getUniqueSuffix();
-
+    Logger::instance()->info("%s: calling initAdapter, exportProfiles\n", __FUNCTION__);
     initAdapter();
-    exportProfiles();
+    //exportProfiles();
 }
 
 void BluetoothHandler::powerOn() {
     if (!m_adapter) {
         return;
     }
-
+    Logger::instance()->info("%s: powering On\n", __FUNCTION__);
     setPower(true);
     setPairable(true);
 
     if (Config::instance()->getConnectionStrategy() == ConnectionStrategy::DONGLE_MODE) {
+        Logger::instance()->info("%s:calling StartAdvertising\n", __FUNCTION__);
         startAdvertising();
     }
 }
@@ -274,7 +326,7 @@ std::optional<std::thread> BluetoothHandler::connectWithRetry() {
     if (!m_adapter) {
         return std::nullopt;
     }
-
+    Logger::instance()->info("%s: starting\n", __FUNCTION__);
     connectWithRetryPromise = std::make_shared<std::promise<void>>();
     return std::thread(&BluetoothHandler::retryConnectLoop, this);
 }
@@ -286,11 +338,13 @@ void BluetoothHandler::stopConnectWithRetry() {
 }
 
 void BluetoothHandler::powerOff() {
+    Logger::instance()->info("%s: turniong off\n", __FUNCTION__);
     if (!m_adapter) {
         return;
     }
 
     if (Config::instance()->getConnectionStrategy() == ConnectionStrategy::DONGLE_MODE) {
+        Logger::instance()->info("%s:Calling stop advertising\n", __FUNCTION__);
         stopAdvertising();
     }
     setPower(false);
