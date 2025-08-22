@@ -270,13 +270,17 @@ void BluetoothHandler::retryConnectLoop() {
     bool should_exit = false;
     std::future<void> connectWithRetryFuture = connectWithRetryPromise->get_future();
     Logger::instance()->info("%s:Calling connectDevice in the loop\n", __FUNCTION__);
+    int delay = 0;
+    bool ready = false;
     while (!should_exit) {
         connectDevice();
-
-        if (connectWithRetryFuture.wait_for(std::chrono::seconds(20)) == std::future_status::ready) {
+        Logger::instance()->info("Waiting for %d seconds before next connection attempt\n", delay);
+        if (connectWithRetryFuture.wait_for(std::chrono::seconds(20+delay)) == std::future_status::ready) {
+            Logger::instance()->info("Connection retry loop stopped\n");
             should_exit = true;
             connectWithRetryPromise = nullptr;
         }
+        delay = (delay+5) % 30; // Increment delay by 5 seconds, reset after 30 seconds
     }
 
     if (Config::instance()->getConnectionStrategy() != ConnectionStrategy::DONGLE_MODE) {

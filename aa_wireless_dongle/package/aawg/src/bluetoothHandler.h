@@ -22,7 +22,6 @@ public:
     void stopConnectWithRetry();
     void exportWirelessProfile();
     void exportHSPProfile();
-
 private:
     BluetoothHandler() {};
     BluetoothHandler(BluetoothHandler const&);
